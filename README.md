@@ -1,3 +1,5 @@
+![Project cover](readme-cover.png)
+
 # Document Hub
 
 ## Overview
