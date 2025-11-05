@@ -1,0 +1,178 @@
+* {
+    /* --- UPDATED: Use JetBrains Mono as the primary UI font --- */
+    font-family: "JetBrains Mono", "Ubuntu", sans-serif;
+    color: #e4e6eb;
+    font-size: 14px;
+    border: none;
+    outline: none;
+}
+
+QMainWindow, QWidget {
+    background-color: #242526;
+}
+
+/* --- NEW: Make QWidget transparent to show gradient --- */
+QWidget {
+    background-color: transparent;
+}
+QMainWindow {
+    background-color: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                                    stop:0 #2a2b2c, stop:1 #222324);
+}
+/* --------------------------------------------------- */
+
+
+QTabWidget::pane {
+    border: none;
+    background-color: transparent;
+    padding: 10px;
+}
+
+QTabBar::tab {
+    background: transparent;
+    border: none;
+    padding: 12px 28px;
+    color: #8a8a8a;
+    font-weight: bold;
+}
+
+QTabBar::tab:selected {
+    background: transparent;
+    color: #ffffff;
+    border-bottom: 3px solid #0078d4;
+}
+
+QTabBar::tab:!selected:hover {
+    background: #3a3b3c;
+    color: #e4e6eb;
+}
+
+QSplitter::handle:horizontal {
+    background: #3a3b3c;
+    width: 2px;
+}
+
+QLineEdit {
+    background-color: #3a3b3c;
+    border: 1px solid #3a3b3c;
+    border-radius: 8px;
+    padding: 12px;
+    color: #e4e6eb;
+}
+QLineEdit:focus {
+    border: 1px solid #0078d4;
+}
+
+QPushButton {
+    background-color: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                                    stop:0 #0078d4, stop:1 #005a9e);
+    color: white;
+    border: none;
+    padding: 10px 16px;
+    border-radius: 8px;
+    font-weight: bold;
+}
+QPushButton:hover {
+    background-color: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                                    stop:0 #0088e4, stop:1 #006abe);
+}
+QPushButton:pressed {
+    background-color: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                                    stop:0 #005a9e, stop:1 #004a8e);
+}
+
+QPushButton#settings_button,
+QPushButton#filter_button {
+    background-color: #3a3b3c;
+    padding: 0;
+}
+QPushButton#settings_button:hover,
+QPushButton#filter_button:hover {
+    background-color: #4a4b4c;
+}
+QPushButton#settings_button:pressed,
+QPushButton#filter_button:pressed {
+    background-color: #5a5b5c;
+}
+
+
+QTableWidget {
+    background-color: #2f2f2f;
+    color: #e4e6eb;
+    outline: none;
+    gridline-color: #444;
+}
+
+QTableWidget::item {
+    padding: 10px;
+    border-bottom: 1px solid #444;
+}
+
+QTableWidget::item:selected {
+    background-color: #0078d4;
+    color: white;
+}
+
+QHeaderView::section {
+    background-color: #2f2f2f;
+    color: #8a8a8a;
+    padding: 10px;
+    border: none;
+    border-bottom: 1px solid #444;
+    font-weight: bold;
+}
+
+QTableWidget::verticalHeader {
+    background-color: #2f2f2f;
+    border: none;
+    border-right: 1px solid #444;
+    padding: 10px 5px;
+    text-align: right;
+    color: #8a8a8a;
+}
+
+QTextBrowser#file_preview_text {
+    background-color: #2f2f2f;
+    color: #e4e6eb;
+    padding: 10px;
+    font-family: "JetBrains Mono", "monospace";
+}
+/* ----------------------------------------------- */
+
+QLabel {
+    color: #8a8a8a;
+}
+
+QScrollBar:vertical {
+    border: none;
+    background: #2f2f2f;
+    width: 10px;
+}
+QScrollBar::handle:vertical {
+    background: #4a4a4a;
+    border-radius: 5px;
+    min-height: 20px;
+}
+QScrollBar::handle:vertical:hover {
+    background: #5a5a5a;
+}
+
+QScrollBar:horizontal {
+    border: none;
+    background: #2f2f2f;
+    height: 10px;
+}
+QScrollBar::handle:horizontal {
+    background: #4a4a4a;
+    border-radius: 5px;
+    min-width: 20px;
+}
+QScrollBar::handle:horizontal:hover {
+    background: #5a5a5a;
+}
+
+QStatusBar {
+    background-color: #242526;
+    color: #8a8a8a;
+    border-top: 1px solid #3a3b3c;
+}

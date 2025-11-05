@@ -1,0 +1,42 @@
+# Python virtual environments
+.venv/
+venv/
+env/
+*.env
+
+# Python cache and bytecode
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Build and distribution artifacts
+build/
+dist/
+sdist/
+*.egg-info/
+*.egg
+
+# IDE files (PyCharm)
+.idea/
+*.iml
+
+# Local database files
+*.db
+*.sqlite
+*.sqlite3
+
+# Log and temp files
+*.log
+.coverage
+.tox/
+
+# OS-specific files (macOS, Windows, Linux)
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Sensitive files (if you use them later)
+.env
+/collect_text_and_tree.py
+/project.txt
