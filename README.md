@@ -1,9 +1,5 @@
 # Document Hub
 
-<p align="center">
-  <img src="docs/screenshot.png" alt="Document Hub Screenshot" width="800">
-</p>
-
 ## Overview
 
 Document Hub is a sleek, cross-platform desktop application designed to help you efficiently manage and organize your digital files. Built with Python and PySide6 (Qt for Python), it offers a powerful "Smart Search" functionality with full-text indexing, live file monitoring, and intelligent content preview, alongside an upcoming "File Organizer" for automated sorting.
