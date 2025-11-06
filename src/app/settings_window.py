@@ -1,6 +1,9 @@
+import fileinput
+
 from PySide6.QtWidgets import QDialog, QFileDialog
 
 from src.core.database import get_session, WatchedFolder, IndexedFile
+from src.core.search_index_service import SearchIndexService
 from src.ui.settings_window_ui import Ui_SettingsWindow
 
 
@@ -51,24 +54,34 @@ class SettingsWindow(QDialog):
         if not current_item:
             return
         folder_path = current_item.text()
+
+        index_service = SearchIndexService()
+        writer = index_service.get_writer()
         session = get_session()
+
         try:
             search_pattern = f"{folder_path}%"
-            files_to_delete = session.query(IndexedFile).filter(IndexedFile.file_path.like(search_pattern))
-            files_to_delete.delete(synchronize_session=False)
+            files_to_delete_query = session.query(IndexedFile).filter(IndexedFile.file_path.like(search_pattern))
+            file_paths_to_delete = [f.file_path for f in files_to_delete_query.all()]
 
+            for path in file_paths_to_delete:
+                index_service.delete_document_by_path(writer,path)
+
+            files_to_delete_query.delete(synchronize_session=False)
 
             folder_to_delete = session.query(WatchedFolder).filter_by(file_path=folder_path).first()
             if folder_to_delete:
                 session.delete(folder_to_delete)
 
             session.commit()
+            writer.commit()
 
             self.load_watched_folders()
 
         except Exception as e:
             print(f"Error removing folder and its files: {e}")
             session.rollback()
+            writer.cancel()
 
         finally:
             session.close()

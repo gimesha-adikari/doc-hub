@@ -1,5 +1,5 @@
 * {
-    /* --- UPDATED: Use JetBrains Mono as the primary UI font --- */
+    /* --- Use JetBrains Mono as the primary UI font --- */
     font-family: "JetBrains Mono", "Ubuntu", sans-serif;
     color: #e4e6eb;
     font-size: 14px;
@@ -11,7 +11,7 @@ QMainWindow, QWidget {
     background-color: #242526;
 }
 
-/* --- NEW: Make QWidget transparent to show gradient --- */
+/* --- Make QWidget transparent to show gradient --- */
 QWidget {
     background-color: transparent;
 }
@@ -39,7 +39,8 @@ QTabBar::tab {
 QTabBar::tab:selected {
     background: transparent;
     color: #ffffff;
-    border-bottom: 3px solid #0078d4;
+    /* --- CHANGED: Removed blue border --- */
+    border-bottom: none;
 }
 
 QTabBar::tab:!selected:hover {
@@ -60,27 +61,32 @@ QLineEdit {
     color: #e4e6eb;
 }
 QLineEdit:focus {
-    border: 1px solid #0078d4;
+    /* --- CHANGED: Use gold accent for focus --- */
+    border: 1px solid #ffc66d;
 }
 
 QPushButton {
+    /* --- CHANGED: Use gold gradient --- */
     background-color: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                                    stop:0 #0078d4, stop:1 #005a9e);
-    color: white;
+                                    stop:0 #ffc66d, stop:1 #e0ac50);
+    color: #111111; /* Dark text for contrast */
     border: none;
     padding: 10px 16px;
     border-radius: 8px;
     font-weight: bold;
 }
 QPushButton:hover {
+    /* --- CHANGED: Gold gradient hover --- */
     background-color: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                                    stop:0 #0088e4, stop:1 #006abe);
+                                    stop:0 #ffd788, stop:1 #e6b95c);
 }
 QPushButton:pressed {
+    /* --- CHANGED: Gold gradient pressed --- */
     background-color: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                                    stop:0 #005a9e, stop:1 #004a8e);
+                                    stop:0 #e0ac50, stop:1 #d49f45);
 }
 
+/* Keep icon buttons dark/minimal */
 QPushButton#settings_button,
 QPushButton#filter_button {
     background-color: #3a3b3c;
@@ -97,42 +103,48 @@ QPushButton#filter_button:pressed {
 
 
 QTableWidget {
-    background-color: #2f2f2f;
+    /* --- CHANGED: Transparent background and no gridlines --- */
+    background-color: transparent;
     color: #e4e6eb;
     outline: none;
-    gridline-color: #444;
+    gridline-color: transparent;
 }
 
 QTableWidget::item {
     padding: 10px;
-    border-bottom: 1px solid #444;
+    /* --- CHANGED: No bottom border --- */
+    border-bottom: none;
 }
 
 QTableWidget::item:selected {
-    background-color: #0078d4;
-    color: white;
+    /* --- CHANGED: Gold selection color --- */
+    background-color: #ffc66d;
+    color: #111111; /* Dark text for contrast */
 }
 
 QHeaderView::section {
-    background-color: #2f2f2f;
+    /* --- CHANGED: Transparent background --- */
+    background-color: transparent;
     color: #8a8a8a;
     padding: 10px;
     border: none;
+    /* Keep a subtle bottom border for the header */
     border-bottom: 1px solid #444;
     font-weight: bold;
 }
 
 QTableWidget::verticalHeader {
-    background-color: #2f2f2f;
+    /* --- CHANGED: Hide vertical header lines --- */
+    background-color: transparent;
     border: none;
-    border-right: 1px solid #444;
     padding: 10px 5px;
     text-align: right;
     color: #8a8a8a;
 }
 
 QTextBrowser#file_preview_text {
-    background-color: #2f2f2f;
+    /* --- CHANGED: Darker background for code editor feel --- */
+    background-color: #282c34;
     color: #e4e6eb;
     padding: 10px;
     font-family: "JetBrains Mono", "monospace";

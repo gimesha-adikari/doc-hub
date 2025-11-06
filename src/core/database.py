@@ -43,52 +43,6 @@ class WatchedFolder(Base):
         return f"<WatchedFolder(name='{self.file_path}')>"
 
 
-create_fts_table = DDL("""
-CREATE VIRTUAL TABLE IF NOT EXISTS indexed_file_fts
-USING fts5(
-    file_name,
-    extracted_content,
-    content='indexed_file',
-    content_rowid='id'
-);
-""")
-
-create_insert_trigger = DDL("""
-                            CREATE TRIGGER IF NOT EXISTS t_indexed_file_insert AFTER INSERT ON indexed_file
-                            BEGIN
-                            INSERT INTO indexed_file_fts(rowid, file_name, extracted_content)
-                            VALUES (new.id, new.file_name, new.extracted_content);
-                            END;
-                            """)
-
-create_update_trigger = DDL("""
-                            CREATE TRIGGER IF NOT EXISTS t_indexed_file_update AFTER
-                            UPDATE OF file_name, extracted_content
-                            ON indexed_file
-                            BEGIN
-                            UPDATE indexed_file_fts
-                            SET file_name         = new.file_name,
-                                extracted_content = new.extracted_content
-                            WHERE rowid = old.id;
-                            END;
-                            """)
-
-create_delete_trigger = DDL("""
-                            CREATE TRIGGER IF NOT EXISTS t_indexed_file_delete AFTER
-                            DELETE
-                            ON indexed_file
-                            BEGIN
-                            DELETE
-                            FROM indexed_file_fts
-                            WHERE rowid = old.id;
-                            END;
-                            """)
-
-event.listen(Base.metadata, 'after_create', create_fts_table)
-event.listen(Base.metadata, 'after_create', create_insert_trigger)
-event.listen(Base.metadata, 'after_create', create_update_trigger)
-event.listen(Base.metadata, 'after_create', create_delete_trigger)
-
 def create_db_and_tables():
     Base.metadata.create_all(bind=engine)
 

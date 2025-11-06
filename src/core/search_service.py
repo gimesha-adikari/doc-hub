@@ -1,10 +1,33 @@
-from sqlalchemy import select, desc, text, column, Integer, table, not_
+import os
+from sqlalchemy import select, desc, not_
+from whoosh import index as whoosh_index
+from whoosh.fields import Schema, ID, TEXT
+from whoosh.qparser import MultifieldParser, WildcardPlugin
+from whoosh.query import And, Prefix
+
 from src.core.database import get_session, IndexedFile
+from src.core.search_index_service import INDEX_DIR
 
 
 class SearchService:
     def __init__(self):
-        pass
+        self.index_dir = INDEX_DIR
+        self.schema = Schema(
+            file_path=ID(stored=True, unique=True),
+            file_name=TEXT(stored=True),
+            content=TEXT(stored=True)
+        )
+        self.ix = self._open_index()
+
+    def _open_index(self):
+        if not os.path.exists(self.index_dir):
+            os.makedirs(self.index_dir)
+            return whoosh_index.create_in(self.index_dir, self.schema)
+
+        if whoosh_index.exists_in(self.index_dir):
+            return whoosh_index.open_dir(self.index_dir)
+        else:
+            return whoosh_index.create_in(self.index_dir, self.schema)
 
     def parse_search_query(self, search_text: str) -> (str, list[str], list[str]):
         parts = search_text.strip().lower().split()
@@ -14,53 +37,77 @@ class SearchService:
         for part in parts:
             if part.startswith(".") and len(part) > 1:
                 file_types.append(part)
-            else:
+            elif part:
                 keywords.append(part)
 
-        fts_query = " ".join([f'"{k}*"' for k in keywords])
-        return fts_query, keywords, file_types
+        whoosh_query_str = " ".join([f"{k}*" for k in keywords])
 
-    def perform_search(self, search_text: str, excluded_file_types: set) -> list[IndexedFile]:
-        fts_query, keywords, file_types = self.parse_search_query(search_text)
+        return whoosh_query_str, keywords, file_types
 
+    def perform_search(self, search_text: str, excluded_file_types: set, path_filter: str | None = None) -> list[
+        IndexedFile]:
         session = get_session()
         try:
+            whoosh_query_str, keywords, file_types = self.parse_search_query(search_text)
+
             query = select(IndexedFile).where(
                 not_(IndexedFile.file_type.in_(excluded_file_types))
             )
 
-            if not fts_query and not file_types:
-                if len(search_text) > 0:
-                    return []
-                query = query.order_by(desc(IndexedFile.date_indexed))
+            if not whoosh_query_str and not file_types:
+                if len(search_text) > 0: return []
+
+                if path_filter:
+                    if not path_filter.endswith('/'):
+                        path_filter += '/'
+                    query = query.where(IndexedFile.file_path.like(f"{path_filter}%"))
+
+                query = query.order_by(desc(IndexedFile.date_indexed)).limit(100)
+                return session.scalars(query).all()
+
+            search_paths = None
+
+            if whoosh_query_str:
+                with self.ix.searcher() as searcher:
+                    parser = MultifieldParser(["file_name", "content"], schema=self.schema)
+                    parser.add_plugin(WildcardPlugin())
+                    keyword_q = parser.parse(whoosh_query_str)
+
+                    filter_q = None
+                    if path_filter:
+                        if not path_filter.endswith('/'):
+                            path_filter += '/'
+                        filter_q = Prefix("file_path", path_filter)
+
+                    final_query = And([keyword_q, filter_q]) if filter_q else keyword_q
+
+                    results = searcher.search(final_query, limit=500)
+                    search_paths = [hit['file_path'] for hit in results]
+
+                    if not search_paths:
+                        return []
+
+                query = query.where(IndexedFile.file_path.in_(search_paths))
+
             else:
-                if fts_query:
-                    fts_table = table(
-                        "indexed_file_fts",
-                        column("rowid", Integer),
-                        column("file_name"),
-                        column("extracted_content"),
-                    )
-                    query = query.join(
-                        fts_table,
-                        IndexedFile.id == fts_table.c.rowid
-                    ).where(
-                        text("indexed_file_fts MATCH :query")
-                    ).params(
-                        query=fts_query
-                    ).order_by(
-                        desc(text("rank"))
-                    )
+                if path_filter:
+                    if not path_filter.endswith('/'):
+                        path_filter += '/'
+                    query = query.where(IndexedFile.file_path.like(f"{path_filter}%"))
 
-                if file_types:
-                    query = query.where(IndexedFile.file_type.in_(file_types))
+            if file_types:
+                query = query.where(IndexedFile.file_type.in_(file_types))
 
-                if not fts_query and file_types:
-                    query = query.order_by(desc(IndexedFile.date_indexed))
+            if search_paths:
+                sql_results = session.scalars(query).all()
+                results_map = {file.file_path: file for file in sql_results}
 
-            query = query.limit(100)
-            results = session.scalars(query).all()
-            return results
+                ordered_results = [results_map[path] for path in search_paths if path in results_map]
+                return ordered_results[:100]  # Apply limit *after* re-ordering
+
+            else:
+                query = query.order_by(desc(IndexedFile.date_indexed)).limit(100)
+                return session.scalars(query).all()
 
         except Exception as e:
             print(f"Error during search: {e}")
@@ -71,7 +118,21 @@ class SearchService:
     def get_file_preview(self, file_path: str) -> IndexedFile | None:
         session = get_session()
         try:
-            return session.query(IndexedFile).filter_by(file_path=file_path).first()
+            file_record = session.query(IndexedFile).filter_by(file_path=file_path).first()
+
+            if not file_record:
+                return None
+
+            with self.ix.searcher() as searcher:
+                hit = searcher.document(file_path=file_path)
+
+                if hit:
+                    file_record.extracted_content = hit.get('content', '')
+                else:
+                    file_record.extracted_content = "--- Preview not available (file not in search index) ---"
+
+            return file_record
+
         except Exception as e:
             print(f"Error loading preview: {e}")
             return None

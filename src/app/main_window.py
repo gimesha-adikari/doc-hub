@@ -1,13 +1,13 @@
-from PySide6.QtCore import QUrl, QPoint
+from PySide6.QtCore import QUrl, QPoint, QDir
 from PySide6.QtGui import QColor, QIcon, QDesktopServices, QAction, QPixmap, Qt
-from PySide6.QtWidgets import QMainWindow, QGraphicsDropShadowEffect, QWidget, QHeaderView, QTableWidgetItem, QMenu
+from PySide6.QtWidgets import QMainWindow, QGraphicsDropShadowEffect, QWidget, QHeaderView, QTableWidgetItem, QMenu, \
+    QFileSystemModel
 
 from src.app.settings_window import SettingsWindow
 from src.ui.main_window_ui import Ui_MainWindow
 from src.core.syntax_highlighter import Highlighter
 from src.core.search_service import SearchService
-from src.core.background_manager import BackgroundManager  # <-- NEW
-from src.core.file_indexer import IMAGE_TYPES
+from src.core.background_manager import BackgroundManager
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -23,16 +23,30 @@ class MainWindow(QMainWindow):
 
         self.excluded_file_types = set()
 
+        self.file_system_model = QFileSystemModel()
+        self.file_system_model.setRootPath(QDir.homePath())
+        self.file_system_model.setFilter(QDir.AllDirs | QDir.Files | QDir.NoDotAndDotDot)
+
+        self.ui.explorer_tree_view.setModel(self.file_system_model)
+        self.ui.explorer_tree_view.setRootIndex(self.file_system_model.index(QDir.homePath()))
+
+        self.ui.explorer_tree_view.setColumnHidden(1, True)
+        self.ui.explorer_tree_view.setColumnHidden(2, True)
+        self.ui.explorer_tree_view.setColumnHidden(3, True)
+
         self.ui.search_splitter.setSizes([800, 200])
-        self.ui.results_table.verticalHeader().setVisible(True)
+        self.ui.results_table.verticalHeader().setVisible(False)
         self.setup_table_columns()
         self.setup_icons_and_shadows()
 
         self.ui.settings_button.clicked.connect(self.open_settings_window)
         self.ui.filter_button.clicked.connect(self.show_filter_menu)
         self.ui.search_bar.textChanged.connect(self.on_search_text_changed)
-        self.ui.results_table.itemSelectionChanged.connect(self.show_file_preview)
-        self.ui.results_table.itemDoubleClicked.connect(self.open_file)
+
+        self.ui.results_table.itemSelectionChanged.connect(self.show_preview_from_table)
+        self.ui.results_table.itemDoubleClicked.connect(self.open_file_from_table)
+        self.ui.explorer_tree_view.selectionModel().selectionChanged.connect(self.show_preview_from_tree)
+        self.ui.explorer_tree_view.doubleClicked.connect(self.open_file_from_tree)
 
         self.manager.scan_finished.connect(self.on_scan_finished)
 
@@ -53,6 +67,31 @@ class MainWindow(QMainWindow):
         self.ui.filter_button.setText("")
         self.ui.filter_button.setIcon(QIcon("resources/icons/filter.svg"))
         self.ui.filter_button.setFixedSize(36, 36)
+
+        self.ui.explorer_tree_view.setStyleSheet("""
+        QTreeView {
+                background-color: #2f2f2f;
+                color: #e4e6eb;
+                border: none;
+                font-family: "JetBrains Mono", "Ubuntu", sans-serif;
+            }
+            QTreeView::item:selected {
+                background-color: #0078d4;
+                color: white;
+            }
+            QTreeView::item:hover {
+                background-color: #3a3b3c;
+            }
+            QHeaderView::section {
+                background-color: #3a3b3c;
+                color: #e4e6eb;
+                padding: 10px;
+                border: none;
+                border-bottom: 2px solid #444;
+                font-weight: bold;
+            }
+        """)
+
         self.apply_shadow(self.ui.search_bar)
         self.apply_shadow(self.ui.settings_button)
         self.apply_shadow(self.ui.filter_button)
@@ -134,30 +173,43 @@ class MainWindow(QMainWindow):
     def on_search_text_changed(self):
         search_text = self.ui.search_bar.text()
 
-        _, keywords, _ = self.search_service.parse_search_query(search_text)
-        self.highlighter.set_search_terms(keywords)
+        if not search_text:
+            self.ui.view_stack.setCurrentWidget(self.ui.page_explorer)
+            self.highlighter.set_search_terms([])
+            self.show_preview_from_tree()
+        else:
+            self.ui.view_stack.setCurrentWidget(self.ui.page_search_results)
 
-        results = self.search_service.perform_search(search_text, self.excluded_file_types)
+            current_index = self.ui.explorer_tree_view.currentIndex()
+            current_path = self.file_system_model.filePath(current_index)
 
-        self.ui.results_table.setRowCount(0)
-        self.ui.results_table.setRowCount(len(results))
-        for row, file in enumerate(results):
-            file_size_str = self.format_size(file.file_size)
-            mod_time_str = file.date_modified.strftime("%Y-%m-%d %H:%M")
+            if not current_path or not QDir(current_path).exists():
+                current_path = QDir.homePath()
 
-            name_item = QTableWidgetItem(file.file_name)
-            name_item.setData(0x0100, file.file_path)
-            name_item.setData(0x0101, file.file_type)
-            type_item = QTableWidgetItem(file.file_type)
-            size_item = QTableWidgetItem(file_size_str)
-            modified_item = QTableWidgetItem(mod_time_str)
+            _, keywords, _ = self.search_service.parse_search_query(search_text)
+            self.highlighter.set_search_terms(keywords)
 
-            self.ui.results_table.setItem(row, 0, name_item)
-            self.ui.results_table.setItem(row, 1, type_item)
-            self.ui.results_table.setItem(row, 2, size_item)
-            self.ui.results_table.setItem(row, 3, modified_item)
+            results = self.search_service.perform_search(search_text, self.excluded_file_types, path_filter=current_path)
 
-    def show_file_preview(self):
+            self.ui.results_table.setRowCount(0)
+            self.ui.results_table.setRowCount(len(results))
+            for row, file in enumerate(results):
+                file_size_str = self.format_size(file.file_size)
+                mod_time_str = file.date_modified.strftime("%Y-%m-%d %H:%M")
+
+                name_item = QTableWidgetItem(file.file_name)
+                name_item.setData(0x0100, file.file_path)
+                name_item.setData(0x0101, file.file_type)
+                type_item = QTableWidgetItem(file.file_type)
+                size_item = QTableWidgetItem(file_size_str)
+                modified_item = QTableWidgetItem(mod_time_str)
+
+                self.ui.results_table.setItem(row, 0, name_item)
+                self.ui.results_table.setItem(row, 1, type_item)
+                self.ui.results_table.setItem(row, 2, size_item)
+                self.ui.results_table.setItem(row, 3, modified_item)
+
+    def show_preview_from_table(self):
         selected_items = self.ui.results_table.selectedItems()
         if not selected_items:
             self.ui.preview_stack.setCurrentWidget(self.ui.page_default)
@@ -169,11 +221,27 @@ class MainWindow(QMainWindow):
 
         file_path = name_item.data(0x0100)
         file_type = name_item.data(0x0101)
+        self.update_preview_pane(file_path, file_type)
 
-        if not file_path:
+    def show_preview_from_tree(self):
+        current_index = self.ui.explorer_tree_view.currentIndex()
+        if not current_index.isValid() or self.file_system_model.isDir(current_index):
+            self.ui.preview_stack.setCurrentWidget(self.ui.page_default)
             return
 
-        if file_type =="image":
+        file_path = self.file_system_model.filePath(current_index)
+
+        file_record = self.search_service.get_file_preview(file_path)
+        file_type = file_record.file_type if file_record else "unsupported"
+
+        self.update_preview_pane(file_path, file_type)
+
+    def update_preview_pane(self, file_path: str | None, file_type: str | None):
+        if not file_path:
+            self.ui.preview_stack.setCurrentWidget(self.ui.page_default)
+            return
+
+        if file_type == "image":
             self.highlighter.set_language(None)
             pixmap = QPixmap(file_path)
 
@@ -199,11 +267,17 @@ class MainWindow(QMainWindow):
                 self.ui.file_preview_text.setText("--- Preview not available or file is empty ---")
             self.ui.preview_stack.setCurrentWidget(self.ui.page_text)
 
-    def open_file(self, item: QTableWidgetItem):
-        name_item = self.ui.results_table.item(item.row(), 0)
+    def open_file_from_table(self,item: QTableWidgetItem):
+        name_item = self.ui.results_table.item(item.row, 0)
         file_path = name_item.data(0x0100)
         if file_path:
             QDesktopServices.openUrl(QUrl.fromLocalFile(file_path))
+
+    def open_file_from_tree(self, index):
+        if not self.file_system_model.isDir(index):
+            file_path = self.file_system_model.filePath(index)
+            if file_path:
+                QDesktopServices.openUrl(QUrl.fromLocalFile(file_path))
 
     def on_scan_finished(self):
         self.ui.settings_button.setEnabled(True)

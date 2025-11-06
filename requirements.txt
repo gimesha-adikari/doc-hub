@@ -1,3 +1,4 @@
+tika
 PySide6~=6.10.0
 SQLAlchemy~=2.0.44
 pypdf~=6.1.3

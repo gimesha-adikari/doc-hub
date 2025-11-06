@@ -19,7 +19,8 @@ from PySide6.QtWidgets import (QAbstractItemView, QApplication, QHBoxLayout, QHe
     QLabel, QLineEdit, QMainWindow, QMenuBar,
     QPushButton, QSizePolicy, QSpacerItem, QSplitter,
     QStackedWidget, QStatusBar, QTabWidget, QTableWidget,
-    QTableWidgetItem, QTextBrowser, QVBoxLayout, QWidget)
+    QTableWidgetItem, QTextBrowser, QTreeView, QVBoxLayout,
+    QWidget)
 
 class Ui_MainWindow(object):
     def setupUi(self, MainWindow):
@@ -59,7 +60,26 @@ class Ui_MainWindow(object):
         self.search_splitter = QSplitter(self.tab_smart_search)
         self.search_splitter.setObjectName(u"search_splitter")
         self.search_splitter.setOrientation(Qt.Horizontal)
-        self.results_table = QTableWidget(self.search_splitter)
+        self.view_stack = QStackedWidget(self.search_splitter)
+        self.view_stack.setObjectName(u"view_stack")
+        self.page_explorer = QWidget()
+        self.page_explorer.setObjectName(u"page_explorer")
+        self.explorer_layout = QVBoxLayout(self.page_explorer)
+        self.explorer_layout.setObjectName(u"explorer_layout")
+        self.explorer_layout.setContentsMargins(0, 0, 0, 0)
+        self.explorer_tree_view = QTreeView(self.page_explorer)
+        self.explorer_tree_view.setObjectName(u"explorer_tree_view")
+        self.explorer_tree_view.setHeaderHidden(True)
+
+        self.explorer_layout.addWidget(self.explorer_tree_view)
+
+        self.view_stack.addWidget(self.page_explorer)
+        self.page_search_results = QWidget()
+        self.page_search_results.setObjectName(u"page_search_results")
+        self.search_results_layout = QVBoxLayout(self.page_search_results)
+        self.search_results_layout.setObjectName(u"search_results_layout")
+        self.search_results_layout.setContentsMargins(0, 0, 0, 0)
+        self.results_table = QTableWidget(self.page_search_results)
         if (self.results_table.columnCount() < 4):
             self.results_table.setColumnCount(4)
         __qtablewidgetitem = QTableWidgetItem()
@@ -74,8 +94,12 @@ class Ui_MainWindow(object):
         self.results_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.results_table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.results_table.setHorizontalScrollMode(QAbstractItemView.ScrollPerPixel)
-        self.search_splitter.addWidget(self.results_table)
         self.results_table.horizontalHeader().setStretchLastSection(True)
+
+        self.search_results_layout.addWidget(self.results_table)
+
+        self.view_stack.addWidget(self.page_search_results)
+        self.search_splitter.addWidget(self.view_stack)
         self.preview_stack = QStackedWidget(self.search_splitter)
         self.preview_stack.setObjectName(u"preview_stack")
         self.page_text = QWidget()
@@ -168,6 +192,7 @@ class Ui_MainWindow(object):
         self.retranslateUi(MainWindow)
 
         self.main_tab_widget.setCurrentIndex(0)
+        self.view_stack.setCurrentIndex(0)
         self.preview_stack.setCurrentIndex(0)
 
 
