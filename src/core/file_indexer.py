@@ -1,3 +1,5 @@
+import os
+import fnmatch
 from datetime import datetime
 from pathlib import Path
 
@@ -11,60 +13,109 @@ from tika import parser as tika_parser
 
 from src.core.search_index_service import SearchIndexService
 
-code = {
+IGNORED_DIRS = {
+    '.git', '.hg', '.svn',
+    '.idea', '.vs', '.vscode',
+    'node_modules', '.next', '.nuxt', '.cache', '.parcel-cache', '.vite',
+    '.svelte-kit', '.angular', '.yarn', '.pnp', '.pnpm-store', '.vercel',
+    '.netlify', '.docusaurus',
+    '__pycache__', '.pytest_cache', '.mypy_cache', '.ruff_cache', '.tox',
+    '.ipynb_checkpoints', '.venv', 'venv', 'env', '.eggs',
+    '.gradle', '.build', 'build', 'out', 'libs',
+    'Pods', 'DerivedData',
+    'bin', 'obj',
+    'target',
+    '.terraform', '.serverless', '.firebase', '.expo', '.dart_tool',
+    'temp', 'tmp', 'logs'
+}
+
+IGNORED_DIR_GLOBS = [
+    '*.egg-info'
+]
+
+IGNORED_FILES = {
+    'package-lock.json', 'yarn.lock', 'pnpm-lock.yaml', 'bun.lockb',
+    'Pipfile.lock', 'poetry.lock', 'composer.lock', 'Gemfile.lock', 'Cargo.lock',
+    '.DS_Store', 'Thumbs.db', 'desktop.ini',
+    'gradle-wrapper.jar', '.coverage'
+}
+
+IGNORED_FILE_GLOBS = [
+    '.coverage.*',
+    '*.pyc', '*.pyo', '*.pyd',
+    '*.class',
+    '*.o', '*.obj', '*.a', '*.so', '*.dll', '*.dylib',
+    '*.min.*.map',
+    '.env.*.local', '*.local.env', '.env',
+    '*.log', '*.tmp', '*.temp',
+    'stats.*.json', 'stats.json',
+]
+
+CODE_EXTENSIONS = {
     '.py', '.java', '.js', '.css', '.html', '.md', '.qss', '.xml',
     '.cpp', '.h', '.hpp', '.c', '.cs', '.php', '.rb', '.go', '.rs',
     '.swift', '.kt', '.scala', '.r', '.sql', '.sh', '.bat', '.ps1',
     '.yaml', '.yml', '.json', '.ts', '.jsx', '.tsx'
 }
 
+TEXT_EXTENSIONS = {
+    '.txt', '.ini', '.cfg', '.conf', '.properties', '.toml'
+}
+
+COMPLEX_MIME_PREFIXES = (
+    'application/pdf',
+    'application/msword',
+    'application/vnd.openxmlformats-officedocument',
+    'application/vnd.ms-excel',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    'application/vnd.ms-powerpoint',
+    'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+)
+
 
 def extract_content_from_file(file_path: Path) -> (str, str):
+    suffix = file_path.suffix.lower()
+
+    if suffix in CODE_EXTENSIONS or suffix in TEXT_EXTENSIONS:
+        try:
+            content = file_path.read_text(encoding='utf-8', errors='ignore')
+            display_type = suffix if suffix else ".txt"
+            return display_type, content.strip()
+        except Exception as e:
+            print(f"Error reading plain text file {file_path}: {e}")
+            return "unsupported", ""
+
     try:
         parsed_data = tika_parser.from_file(str(file_path))
-
         content = parsed_data.get("content") or ""
         metadata = parsed_data.get("metadata") or {}
-
         mime_type = metadata.get('Content-Type', 'application/octet-stream')
 
-        display_type = "unsupported"
-
         if mime_type.startswith("image/"):
-            display_type = "image"
-        elif mime_type == "application/pdf":
-            display_type = ".pdf"
-        elif mime_type.startswith('text/'):
-            display_type = ".txt"
-        elif 'application/vnd.openxmlformats-officedocument' in mime_type:
-            display_type = ".docx"
-        elif 'application/msword' in mime_type:
-            display_type = ".doc"
-        elif 'application/json' in mime_type:
-            display_type = ".json"
-        elif 'application/xml' in mime_type:
-            display_type = ".xml"
+            return "image", ""
 
-        suffix = file_path.suffix.lower()
-        if suffix in code:
-            display_type = suffix
+        if mime_type.startswith(COMPLEX_MIME_PREFIXES):
+            if suffix and suffix in CODE_EXTENSIONS:
+                display_type = suffix
+            elif mime_type == "application/pdf":
+                display_type = ".pdf"
+            elif 'application/vnd.openxmlformats-officedocument' in mime_type:
+                display_type = ".docx"
+            elif 'application/msword' in mime_type:
+                display_type = ".doc"
+            else:
+                display_type = suffix if suffix else "unsupported"
 
-        if not content and display_type.startswith('.'):
-            content = file_path.read_text(encoding='utf-8', errors='ignore')
-        return display_type, (content or "").strip()
+            return display_type, content.strip()
+
+        if content:
+            return ".txt", content.strip()
+
+        return f"unsupported ({suffix})", ""
 
     except Exception as e:
         print(f"Error reading {file_path} with Tika: {e}")
-
-        try:
-            suffix = file_path.suffix.lower()
-            if suffix in code:
-                content = file_path.read_text(encoding='utf-8', errors='ignore')
-                return suffix, content
-        except Exception:
-            pass
-
-        return "unsupported", ""
+        return f"unsupported ({suffix})", ""
 
 
 class FileIndexWorker(QObject):
@@ -73,7 +124,23 @@ class FileIndexWorker(QObject):
 
     def __init__(self):
         super().__init__()
-        self.index_service= SearchIndexService()
+        self.index_service = SearchIndexService()
+
+    def _is_dir_ignored(self, dir_name: str) -> bool:
+        if dir_name in IGNORED_DIRS:
+            return True
+        for pattern in IGNORED_DIR_GLOBS:
+            if fnmatch.fnmatch(dir_name, pattern):
+                return True
+        return False
+
+    def _is_file_ignored(self, file_name: str) -> bool:
+        if file_name in IGNORED_FILES:
+            return True
+        for pattern in IGNORED_FILE_GLOBS:
+            if fnmatch.fnmatch(file_name, pattern):
+                return True
+        return False
 
     def run_scan(self):
         self.progress_updated.emit("Starting scan...")
@@ -91,13 +158,24 @@ class FileIndexWorker(QObject):
 
             for folder in folders:
                 self.progress_updated.emit(f"Scanning {folder.file_path}...")
-                folder_path = Path(folder.file_path)
 
-                for file_path in folder_path.rglob("*"):
-                    if not file_path.is_file():
-                        continue
+                for root, dirs, files in os.walk(folder.file_path, topdown=True):
+                    dirs[:] = [d for d in dirs if not self._is_dir_ignored(d)]
 
-                    self._process_file(session, writer, file_path)
+                    for filename in files:
+                        if self._is_file_ignored(filename):
+                            continue
+
+                        try:
+                            file_path = Path(os.path.join(root, filename))
+
+                            if not file_path.is_file():
+                                continue
+
+                            self._process_file(session, writer, file_path)
+
+                        except (OSError, FileNotFoundError) as e:
+                            print(f"Skipping file {filename}: {e}")
 
             self.progress_updated.emit("Scan completed.")
         except Exception as e:
@@ -126,6 +204,9 @@ class FileIndexWorker(QObject):
 
             display_type, content = extract_content_from_file(file_path)
 
+            if display_type.startswith("unsupported"):
+                return
+
             if not existing_file:
                 new_file = IndexedFile(
                     file_name=file_path.name,
@@ -146,13 +227,14 @@ class FileIndexWorker(QObject):
                 existing_file.date_indexed = datetime.now()
                 new_file = existing_file
 
-            whoosh_record = IndexedFile(
-                file_path=str_path,
-                file_name=file_path.name,
-                extracted_content=content
-            )
+            if content:
+                whoosh_record = IndexedFile(
+                    file_path=str_path,
+                    file_name=file_path.name,
+                    extracted_content=content
+                )
+                self.index_service.add_or_update_document(writer, whoosh_record)
 
-            self.index_service.add_or_update_document(writer,whoosh_record)
             session.commit()
 
         except Exception as e:

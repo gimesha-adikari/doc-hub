@@ -40,3 +40,5 @@ desktop.ini
 .env
 /collect_text_and_tree.py
 /project.txt
+/database/whoosh_index/
+/database/

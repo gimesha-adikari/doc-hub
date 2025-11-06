@@ -1,15 +1,19 @@
-from PySide6.QtCore import QUrl, QPoint, QDir
+from PySide6.QtCore import QUrl, QPoint, QDir, Signal, QThread, QTimer
 from PySide6.QtGui import QColor, QIcon, QDesktopServices, QAction, QPixmap, Qt
 from PySide6.QtWidgets import QMainWindow, QGraphicsDropShadowEffect, QWidget, QHeaderView, QTableWidgetItem, QMenu, \
     QFileSystemModel
 
 from src.app.settings_window import SettingsWindow
+from src.core.search_worker import SearchWorker
 from src.ui.main_window_ui import Ui_MainWindow
 from src.core.syntax_highlighter import Highlighter
 from src.core.search_service import SearchService
 from src.core.background_manager import BackgroundManager
 
+
 class MainWindow(QMainWindow):
+    search_requested = Signal(str, set, str)
+
     def __init__(self):
         super().__init__()
 
@@ -38,6 +42,21 @@ class MainWindow(QMainWindow):
         self.ui.results_table.verticalHeader().setVisible(False)
         self.setup_table_columns()
         self.setup_icons_and_shadows()
+
+        self.search_timer = QTimer(self)
+        self.search_timer.setSingleShot(True)
+        self.search_timer.setInterval(300)
+
+        self.search_thread = QThread()
+        self.search_worker = SearchWorker(self.search_service)
+        self.search_worker.moveToThread(self.search_thread)
+
+        self.search_timer.timeout.connect(self.trigger_background_search)
+        self.search_requested.connect(self.search_worker.run_search)
+        self.search_worker.results_ready.connect(self.on_search_results_ready)
+        self.search_worker.search_complete.connect(self.ui.statusbar.showMessage)
+
+        self.search_thread.start()
 
         self.ui.settings_button.clicked.connect(self.open_settings_window)
         self.ui.filter_button.clicked.connect(self.show_filter_menu)
@@ -179,35 +198,41 @@ class MainWindow(QMainWindow):
             self.show_preview_from_tree()
         else:
             self.ui.view_stack.setCurrentWidget(self.ui.page_search_results)
-
-            current_index = self.ui.explorer_tree_view.currentIndex()
-            current_path = self.file_system_model.filePath(current_index)
-
-            if not current_path or not QDir(current_path).exists():
-                current_path = QDir.homePath()
-
             _, keywords, _ = self.search_service.parse_search_query(search_text)
             self.highlighter.set_search_terms(keywords)
 
-            results = self.search_service.perform_search(search_text, self.excluded_file_types, path_filter=current_path)
+        self.search_timer.start()
 
-            self.ui.results_table.setRowCount(0)
-            self.ui.results_table.setRowCount(len(results))
-            for row, file in enumerate(results):
-                file_size_str = self.format_size(file.file_size)
-                mod_time_str = file.date_modified.strftime("%Y-%m-%d %H:%M")
 
-                name_item = QTableWidgetItem(file.file_name)
-                name_item.setData(0x0100, file.file_path)
-                name_item.setData(0x0101, file.file_type)
-                type_item = QTableWidgetItem(file.file_type)
-                size_item = QTableWidgetItem(file_size_str)
-                modified_item = QTableWidgetItem(mod_time_str)
+    def trigger_background_search(self):
+        self.ui.statusbar.showMessage("Searching in background...")
+        search_text = self.ui.search_bar.text()
 
-                self.ui.results_table.setItem(row, 0, name_item)
-                self.ui.results_table.setItem(row, 1, type_item)
-                self.ui.results_table.setItem(row, 2, size_item)
-                self.ui.results_table.setItem(row, 3, modified_item)
+        current_index = self.ui.explorer_tree_view.currentIndex()
+        current_path = self.file_system_model.filePath(current_index)
+        if not current_path or not QDir(current_path).exists():
+            current_path = QDir.homePath()
+
+        self.search_requested.emit(search_text, self.excluded_file_types, current_path)
+
+    def on_search_results_ready(self, results:list):
+        self.ui.results_table.setRowCount(0)
+        self.ui.results_table.setRowCount(len(results))
+        for row, file in enumerate(results):
+            file_size_str = self.format_size(file.file_size)
+            mod_time_str = file.date_modified.strftime("%Y-%m-%d %H:%M")
+
+            name_item = QTableWidgetItem(file.file_name)
+            name_item.setData(0x0100, file.file_path)
+            name_item.setData(0x0101, file.file_type)
+            type_item = QTableWidgetItem(file.file_type)
+            size_item = QTableWidgetItem(file_size_str)
+            modified_item = QTableWidgetItem(mod_time_str)
+
+            self.ui.results_table.setItem(row, 0, name_item)
+            self.ui.results_table.setItem(row, 1, type_item)
+            self.ui.results_table.setItem(row, 2, size_item)
+            self.ui.results_table.setItem(row, 3, modified_item)
 
     def show_preview_from_table(self):
         selected_items = self.ui.results_table.selectedItems()
@@ -267,7 +292,7 @@ class MainWindow(QMainWindow):
                 self.ui.file_preview_text.setText("--- Preview not available or file is empty ---")
             self.ui.preview_stack.setCurrentWidget(self.ui.page_text)
 
-    def open_file_from_table(self,item: QTableWidgetItem):
+    def open_file_from_table(self, item: QTableWidgetItem):
         name_item = self.ui.results_table.item(item.row, 0)
         file_path = name_item.data(0x0100)
         if file_path:
