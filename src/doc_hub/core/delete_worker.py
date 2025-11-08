@@ -1,6 +1,6 @@
 from PySide6.QtCore import QObject, Signal, Slot
-from src.core.database import get_session, WatchedFolder, IndexedFile
-from src.core.search_index_service import SearchIndexService
+from doc_hub.core.database import get_session, WatchedFolder, IndexedFile
+from doc_hub.core.search_index_service import SearchIndexService
 
 
 class DeleteFolderWorker(QObject):

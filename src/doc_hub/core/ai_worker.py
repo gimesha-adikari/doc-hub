@@ -1,7 +1,7 @@
 from PySide6.QtCore import QObject, Signal, Slot
 
-from src.core import ai_service
-from src.core.ai_service import AIService
+from doc_hub.core import ai_service
+from doc_hub.core.ai_service import AIService
 
 class AIWorker(QObject):
 

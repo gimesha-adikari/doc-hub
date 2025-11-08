@@ -1,0 +1,43 @@
+[build-system]
+requires = [ "setuptools>=61.0", "wheel", "build", "toml",]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "doc-hub"
+version = "1.0.0"
+description = "AI-powered document management and search app"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies =  [
+    "PySide6",
+    "sqlalchemy",
+    "markdown",
+    "pyperclip",
+    "tika",
+    "whoosh",
+    "pygments",
+    "python-dotenv",
+    "google-generativeai"
+]
+[[project.authors]]
+name = "Gimesha Nirmal"
+
+[project.license]
+text = "MIT"
+
+[project.scripts]
+doc-hub = "doc_hub.main:main"
+
+[tool.setuptools.package-dir]
+"" = "src"
+
+[tool.setuptools.packages.find]
+where = [ "src",]
+include = [ "doc_hub*",]
+
+[tool.setuptools.package-data]
+"doc_hub" = [
+    "resources/*.qss",
+    "resources/icons/*.svg"
+]
+

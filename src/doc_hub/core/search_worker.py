@@ -1,6 +1,6 @@
 from __future__ import annotations
 from PySide6.QtCore import QObject, Signal, Slot
-from src.core.search_service import SearchService
+from doc_hub.core.search_service import SearchService
 
 class SearchWorker(QObject):
     results_ready = Signal(list)

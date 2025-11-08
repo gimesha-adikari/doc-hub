@@ -4,27 +4,39 @@ import re
 import google.generativeai as genai
 from dotenv import load_dotenv
 
-load_dotenv()
-
-YOUR_API_KEY = os.environ.get("GOOGLE_API_KEY")
-
 
 class AIService:
     def __init__(self):
-        try:
-            if not YOUR_API_KEY:
-                raise ValueError("GOOGLE_API_KEY not found. Please check your .env file.")
+        self.api_key = self.load_api_key()
 
-            genai.configure(api_key=YOUR_API_KEY)
+        if not self.api_key:
+            print("⚠️ GOOGLE_API_KEY not found. Please set it in Settings.")
+            self.model = None
+            self.chat = None
+            return
+
+        try:
+            genai.configure(api_key=self.api_key)
             self.model = genai.GenerativeModel('gemini-2.5-flash')
             self.chat = self.model.start_chat(history=[])
+            print("✅ AI Service initialized successfully.")
         except Exception as e:
-            print(f"Error initializing AI Service: {e}")
+            print(f"❌ Error initializing AI Service: {e}")
             self.model = None
+            self.chat = None
+
+    def load_api_key(self) -> str:
+
+        found = load_dotenv()
+        if not found:
+            load_dotenv(os.path.expanduser("~/.doc-hub-env"))
+
+        return os.getenv("GOOGLE_API_KEY")
 
     def get_response(self, document_content: str, user_question: str) -> str:
+
         if not self.model:
-            return "AI Service is not configured. Check your API key or .env file."
+            return "⚠️ AI Service is not configured. Please check your API key in Settings."
 
         prompt = f"""
         Here is a document:
@@ -44,29 +56,29 @@ class AIService:
             return f"Error from AI: {e}"
 
     def get_tags_and_summary(self, document_content: str) -> (str, str):
+
         if not self.model:
             return "", ""
 
         truncated_content = document_content[:10000]
 
         prompt = f"""
-        Analyze the document provided below.
+        Analyze the document below and respond strictly in JSON.
 
         DOCUMENT:
         ---
         {truncated_content}
         ---
 
-        Respond *only* in JSON format with two keys:
-        1. "summary": A single-sentence summary of the document.
-        2. "tags": A JSON array of 5-10 relevant keywords.
-
-        JSON:
+        JSON format:
+        {{
+            "summary": "one-sentence summary",
+            "tags": ["keyword1", "keyword2", ...]
+        }}
         """
 
         try:
             response = self.model.generate_content(prompt)
-
             clean_text = response.text.strip().replace("```json", "").replace("```", "")
 
             match = re.search(r'\{.*\}', clean_text, re.DOTALL)
@@ -74,14 +86,11 @@ class AIService:
                 return "", ""
 
             data = json.loads(match.group(0))
-
-            summary = data.get('summary', '')
+            summary = data.get('summary', '').strip()
             tags_list = data.get('tags', [])
-
             tags_str = ", ".join(tags_list)
 
             return tags_str, summary
-
         except Exception as e:
             print(f"Error getting AI tags/summary: {e}")
             return "", ""
@@ -101,6 +110,7 @@ class AIService:
         ]
 
         ext = Path(file_name).suffix.lower()
+
         if not file_content.strip():
             if ext in [".jpg", ".jpeg", ".png", ".gif", ".bmp", ".svg", ".webp"]:
                 return "Images"
@@ -124,36 +134,31 @@ class AIService:
         truncated_content = file_content[:2000]
 
         prompt = f"""
-        You are a file organizer. Your job is to assign a single, one-word category
-        to a file based on its name and content.
-
-        Choose only from this list:
+        You are a file organizer. Assign a one-word category from this list:
         {", ".join(categories)}
 
         FILE NAME:
         {file_name}
 
-        FILE CONTENT (first 2000 characters):
+        FILE CONTENT:
         ---
         {truncated_content}
         ---
 
-        Respond with ONLY the category name.
-        CATEGORY:
+        Respond only with the category name.
         """
 
         try:
             response = self.model.generate_content(prompt)
             category = (response.text or "").strip().title()
-
             category = category.replace("Files", "").replace("File", "").strip()
+
             if category.endswith("s") and category[:-1] in categories:
                 category = category[:-1]
 
             for c in categories:
-                if category.lower() == c.lower() or category.lower().startswith(c.lower()):
+                if category.lower().startswith(c.lower()):
                     return c
-
             return "Other"
 
         except Exception as e:

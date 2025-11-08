@@ -42,3 +42,5 @@ desktop.ini
 /project.txt
 /database/whoosh_index/
 /database/
+/src/doc_hub/resources/
+/resources/

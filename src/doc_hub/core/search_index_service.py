@@ -3,7 +3,7 @@ from whoosh.fields import Schema, ID, TEXT, DATETIME
 from whoosh.index import create_in, open_dir, exists_in
 from whoosh.writing import AsyncWriter
 
-from src.core.database import DATABASE_DIR
+from doc_hub.core.database import DATABASE_DIR
 
 INDEX_DIR = os.path.join(DATABASE_DIR, "whoosh_index")
 

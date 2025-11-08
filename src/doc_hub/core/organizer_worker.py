@@ -2,8 +2,8 @@ import os
 import shutil
 from pathlib import Path
 from PySide6.QtCore import QObject, Signal, Slot
-from src.core.ai_service import AIService
-from src.core.file_processing import extract_content_from_file
+from doc_hub.core.ai_service import AIService
+from doc_hub.core.file_processing import extract_content_from_file
 
 
 class OrganizerWorker(QObject):
