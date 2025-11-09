@@ -1537,7 +1537,7 @@ class MainWindow(QMainWindow):
                         json.dump(all_history, open(history_file, "w", encoding="utf-8"), indent=2)
             except Exception as e:
                 print(f"Failed to update history after undo: {e}")
-
+#kkk
 
         except Exception as e:
             self.ui.statusbar.showMessage(f"Undo failed: {e}", 7000)
