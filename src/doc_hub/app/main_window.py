@@ -1,34 +1,57 @@
+import json
+import re
 import shutil
 import textwrap
-
-import markdown
-import re
-import json
 from datetime import datetime
 from pathlib import Path
+from typing import Optional
 
+import markdown
 import pyperclip
-from PySide6.QtCore import QUrl, QPoint, QDir, QTimer, QThread, Signal, Slot, QPropertyAnimation, QEasingCurve
+from PySide6.QtCore import QUrl, QPoint, QDir, QFileSystemWatcher, QTimer, QThread, Signal, Slot, QPropertyAnimation, \
+    QEasingCurve
 from PySide6.QtGui import QColor, QIcon, QDesktopServices, QAction, QPixmap, QTextCursor, Qt, QCursor, QFont
 from PySide6.QtWidgets import (QMainWindow, QGraphicsDropShadowEffect, QWidget,
                                QHeaderView, QTableWidgetItem, QMenu,
                                QFileSystemModel, QFileIconProvider, QFileDialog, QCheckBox, QHBoxLayout,
                                QAbstractItemView, QPushButton, QMessageBox, QDialog, QVBoxLayout, QListWidget,
-                               QScrollArea, QGridLayout, QFrame, QLabel, QTextEdit)
+                               QScrollArea, QGridLayout, QLabel, QTextEdit, QTableWidget, QStatusBar)
+from src.doc_hub.workers.duplicate_worker import DuplicateWorker
+from src.doc_hub.workers.index_worker import IndexWorker
+from src.doc_hub.app.settings_window import SettingsWindow
+from src.doc_hub.app.tag_picker_dialog import TagPickerDialog
+from src.doc_hub.app.type_picker_dialog import TypePickerDialog
+from src.doc_hub.core.ai_service import AIService
+from src.doc_hub.workers.ai_worker import AIWorker
+from src.doc_hub.core.background_manager import BackgroundManager
+from src.doc_hub.workers.organizer_worker import OrganizerWorker
+from src.doc_hub.core.search_service import SearchService
+from src.doc_hub.workers.search_worker import SearchWorker
+from src.doc_hub.core.syntax_highlighter import Highlighter
+from src.doc_hub.ui.main_window_ui import Ui_MainWindow
+from src.doc_hub.core.resource_utils import resource_path
 
-from doc_hub.app.settings_window import SettingsWindow
-from doc_hub.app.tag_picker_dialog import TagPickerDialog
-from doc_hub.app.type_picker_dialog import TypePickerDialog
-from doc_hub.ui.main_window_ui import Ui_MainWindow
-from doc_hub.core.syntax_highlighter import Highlighter
-from doc_hub.core.search_service import SearchService
-from doc_hub.core.background_manager import BackgroundManager
-from doc_hub.core.search_worker import SearchWorker
-from doc_hub.core.ai_service import AIService
-from doc_hub.core.ai_worker import AIWorker
-from doc_hub.core.organizer_worker import OrganizerWorker
-from doc_hub.core.resource_utils import resource_path
+TREE_SITTER_LIB = "build/my-languages.so"
 
+TS_LANG_MAP = {
+    ".py": "python",
+    ".js": "javascript",
+    ".ts": "typescript",
+    ".tsx": "tsx",
+    ".java": "java",
+    ".c": "c",
+    ".cpp": "cpp",
+    ".cc": "cpp",
+    ".cxx": "cpp",
+    ".rs": "rust",
+    ".go": "go",
+    ".php": "php",
+    ".rb": "ruby",
+    ".cs": "c_sharp",
+    ".swift": "swift",
+    ".kt": "kotlin",
+    ".kts": "kotlin",
+}
 
 class MainWindow(QMainWindow):
     search_requested = Signal(str, set, str)
@@ -44,6 +67,8 @@ class MainWindow(QMainWindow):
         self.undo_log_pending = None
         self.dot_count = None
         self.typing_timer = None
+        self.index_thread = None
+        self.duplicate_thread = None
         self.ui = Ui_MainWindow()
         self.ui.setupUi(self)
 
@@ -83,6 +108,18 @@ class MainWindow(QMainWindow):
         self.ui.search_bar_layout.addWidget(self.ui.ai_insights_button)
         self.ui.ai_insights_button.clicked.connect(self.generate_search_insights)
 
+        index_menu = self.menuBar().addMenu("Index")
+        reindex_action = QAction("Rebuild Index", self)
+        reindex_action.triggered.connect(self.trigger_reindex)
+        index_menu.addAction(reindex_action)
+
+        tools_menu = self.menuBar().addMenu("Tools")
+        dup_action = QAction("Find Duplicates", self)
+        dup_action.triggered.connect(self.trigger_find_duplicates)
+        tools_menu.addAction(dup_action)
+
+        self.setStatusBar(self.statusBar() if self.statusBar() else QStatusBar())
+
         self.search_timer = QTimer(self)
         self.search_timer.setSingleShot(True)
         self.search_timer.setInterval(300)
@@ -108,8 +145,6 @@ class MainWindow(QMainWindow):
         self.ai_worker.ai_error.connect(self.on_ai_error)
         self.ai_thread.start()
 
-        # ---
-
         self.organizer_thread = QThread()
         self.organizer_worker = OrganizerWorker(self.ai_service)
         self.organizer_worker.moveToThread(self.organizer_thread)
@@ -134,8 +169,6 @@ class MainWindow(QMainWindow):
         self.ui.organizer_history_button.clicked.connect(self.open_undo_history)
 
         self.organizer_thread.start()
-
-        # ---
 
         self.results_card_container = QScrollArea(self.ui.tab_smart_search)
         self.results_card_container.setWidgetResizable(True)
@@ -206,9 +239,21 @@ class MainWindow(QMainWindow):
         self.manager.run_full_scan()
         self.trigger_search()
 
+        self.watcher = QFileSystemWatcher()
+        self.watcher.fileChanged.connect(self.on_files_changed)
+
         self.results_card_container.resizeEvent = self._on_card_container_resized
 
         self._initialized = True
+
+    def infer_ts_lang(self, file_path: Optional[str]) -> Optional[str]:
+        if not file_path:
+            return None
+        try:
+            ext = Path(file_path).suffix.lower()
+            return TS_LANG_MAP.get(ext)
+        except Exception:
+            return None
 
     def _on_card_container_resized(self, event):
         try:
@@ -927,7 +972,6 @@ class MainWindow(QMainWindow):
         self.excluded_file_types = excluded_types
         self.trigger_search()
 
-
     def on_tags_selected(self, selected_tags: set[str]):
         self.selected_tags = selected_tags
         self.trigger_search()
@@ -1097,8 +1141,10 @@ class MainWindow(QMainWindow):
 
             if file_record and file_record.extracted_content:
 
-                self.highlighter.set_language(file_record.file_path)
-
+                self.highlighter.set_language(
+                    file_record.file_path,
+                    ts_lang=self.infer_ts_lang(file_record.file_path)
+                )
 
                 if file_record.ai_summary:
 
@@ -1642,6 +1688,86 @@ class MainWindow(QMainWindow):
 
     def request_scan(self):
         self.manager.request_scan()
+
+    def trigger_reindex(self):
+        if self.index_thread and self.index_thread.isRunning():
+            QMessageBox.warning(self, "Indexing", "Indexing is already running.")
+            return
+
+        selected_path = self.current_directory if hasattr(self, 'current_directory') else '.'
+        self.index_thread = IndexWorker([selected_path], drop_removed=True)
+        self.index_thread.progress.connect(lambda msg: self.statusBar().showMessage(msg))
+        self.index_thread.finished.connect(self.on_index_finished)
+        try:
+            self.index_thread.start()
+        except RuntimeError:
+            QMessageBox.warning(self, "Thread Error", "Could not start reindex thread.")
+
+    def on_index_finished(self, success, message):
+        if success:
+            self.statusBar().showMessage("Index updated successfully.")
+            QMessageBox.information(self, "Indexing Complete", message)
+        else:
+            QMessageBox.critical(self, "Indexing Failed", message)
+
+    def on_files_changed(self, changed_paths):
+        if not self.index_thread or not self.index_thread.isRunning():
+            self.index_thread = IndexWorker(changed_paths, drop_removed=False)
+            self.index_thread.start()
+
+    def trigger_find_duplicates(self):
+        if self.duplicate_thread and self.duplicate_thread.isRunning():
+            QMessageBox.warning(self, "Duplicate Scan", "A duplicate scan is already running.")
+            return
+
+        selected_path = getattr(self, "current_directory", ".")
+        self.duplicate_thread = DuplicateWorker([selected_path])
+        self.duplicate_thread.progress.connect(lambda msg: self.statusBar().showMessage(msg))
+        self.duplicate_thread.finished.connect(self.on_duplicates_finished)
+        try:
+            self.duplicate_thread.start()
+        except RuntimeError:
+            QMessageBox.warning(self, "Thread Error", "Could not start duplicate scan thread.")
+
+    def on_duplicates_finished(self, success, message, report_path):
+        self.statusBar().showMessage(message)
+        if not success:
+            QMessageBox.critical(self, "Duplicate Scan Failed", message)
+            return
+
+        QMessageBox.information(self, "Duplicate Scan Complete", f"{message}\n\nReport: {report_path}")
+        self.show_duplicate_results(report_path)
+
+    def show_duplicate_results(self, report_path):
+        try:
+            report = json.loads(Path(report_path).read_text(encoding="utf-8"))
+            duplicates = report.get("duplicate_groups", {})
+
+            dialog = QDialog(self)
+            dialog.setWindowTitle("Duplicate Files Report")
+            layout = QVBoxLayout(dialog)
+            layout.addWidget(QLabel(f"Generated at: {report.get('generated_at')}"))
+
+            table = QTableWidget()
+            table.setColumnCount(3)
+            table.setHorizontalHeaderLabels(["Hash", "File Path", "Size (KB)"])
+            rows = sum(len(v) for v in duplicates.values())
+            table.setRowCount(rows)
+
+            r = 0
+            for hash_val, files in duplicates.items():
+                for f in files:
+                    table.setItem(r, 0, QTableWidgetItem(hash_val[:12] + "…"))
+                    table.setItem(r, 1, QTableWidgetItem(f["path"]))
+                    table.setItem(r, 2, QTableWidgetItem(str(round(f["size"] / 1024, 2))))
+                    r += 1
+
+            table.resizeColumnsToContents()
+            layout.addWidget(table)
+            dialog.resize(900, 600)
+            dialog.exec()
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Failed to load duplicate report:\n{e}")
 
     def closeEvent(self, event):
         print("Closing application... shutting down threads.")

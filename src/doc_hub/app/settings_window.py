@@ -1,13 +1,12 @@
 import os
-import fileinput
 from dotenv import set_key, load_dotenv
 
 from PySide6.QtCore import QThread, Signal
 from PySide6.QtWidgets import QDialog, QFileDialog, QLabel, QLineEdit, QPushButton, QVBoxLayout, QFrame, QMessageBox
 
-from doc_hub.core.database import get_session, WatchedFolder
-from doc_hub.ui.settings_window_ui import Ui_SettingsWindow
-from doc_hub.core.delete_worker import DeleteFolderWorker
+from src.doc_hub.core.database import get_session, WatchedFolder
+from src.doc_hub.ui.settings_window_ui import Ui_SettingsWindow
+from src.doc_hub.workers.delete_worker import DeleteFolderWorker
 
 
 class SettingsWindow(QDialog):
@@ -128,7 +127,8 @@ class SettingsWindow(QDialog):
         self.delete_thread.wait()
         super().close()
 
-    def get_env_path(self):
+    @staticmethod
+    def get_env_path():
         return os.path.expanduser("~/.doc-hub-env")
 
     def load_api_key(self):

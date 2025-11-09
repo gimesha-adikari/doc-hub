@@ -1,13 +1,13 @@
 import os
-from datetime import datetime
+from datetime import datetime, UTC
 from pathlib import Path
 from PySide6.QtCore import QObject, Signal
 from sqlalchemy.orm import Session
 from whoosh.writing import AsyncWriter
-from doc_hub.core.database import get_session, WatchedFolder, IndexedFile, DATABASE_DIR
-from doc_hub.core.search_index_service import SearchIndexService
-from doc_hub.core.ai_service import AIService
-from doc_hub.core.file_processing import extract_content_from_file, is_dir_ignored, is_file_ignored
+from src.doc_hub.core.database import get_session, WatchedFolder, IndexedFile, DATABASE_DIR
+from src.doc_hub.core.search_index_service import SearchIndexService
+from src.doc_hub.core.ai_service import AIService
+from src.doc_hub.core.file_processing import extract_content_from_file, is_dir_ignored, is_file_ignored
 
 INDEX_LOG_FILE = os.path.join(DATABASE_DIR, "indexed_files.log")
 
@@ -21,46 +21,51 @@ class FileIndexWorker(QObject):
         self.ai_service = AIService()
 
     def run_scan(self):
-        self.progress_updated.emit("Starting scan...")
+        self.progress_updated.emit("Starting full scan...")
         session = get_session()
         writer = self.index_service.get_writer()
+        if writer is None:
+            self.progress_updated.emit("Could not acquire Whoosh writer. Skipping scan.")
+            self.finished.emit()
+            session.close()
+            return
         try:
-            try:
-                with open(INDEX_LOG_FILE, "w", encoding="utf-8") as f:
-                    f.write(f"--- Scan started at {datetime.now()} ---\n")
-            except Exception as log_e:
-                print(f"Failed to clear log file: {log_e}")
+            with open(INDEX_LOG_FILE, "w", encoding="utf-8") as f:
+                f.write(f"--- Scan started at {datetime.now(UTC)} ---\n")
 
             folders = session.query(WatchedFolder).all()
             if not folders:
-                self.progress_updated.emit("No folders to watch. Add folders in Settings.")
+                self.progress_updated.emit("No watched folders found. Add one in Settings.")
                 self.finished.emit()
                 session.close()
                 return
 
             for folder in folders:
-                self.progress_updated.emit(f"Scanning {folder.file_path}...")
-                for root, dirs, files in os.walk(folder.file_path, topdown=True):
+                folder_path = folder.file_path
+                if not os.path.exists(folder_path):
+                    self.progress_updated.emit(f"Skipping missing folder: {folder_path}")
+                    continue
+
+                self.progress_updated.emit(f"Scanning {folder_path}...")
+                for root, dirs, files in os.walk(folder_path, topdown=True):
                     dirs[:] = [d for d in dirs if not is_dir_ignored(d)]
                     for filename in files:
                         if is_file_ignored(filename):
                             continue
                         try:
                             file_path = Path(os.path.join(root, filename))
-                            if not file_path.is_file():
-                                continue
-                            self._process_file(session, writer, file_path)
+                            if file_path.is_file():
+                                self._process_file(session, writer, file_path)
                         except (OSError, FileNotFoundError) as e:
                             print(f"Skipping file {filename}: {e}")
 
-            self.progress_updated.emit("Scan completed.")
+            self.progress_updated.emit("Scan completed successfully.")
         except Exception as e:
             print(f"Error during scan: {e}")
             self.progress_updated.emit(f"Error during scan: {e}")
         finally:
             try:
-                if writer is not None:
-                    writer.commit()
+                self.index_service.commit_writer(writer)
             except Exception as e:
                 print(f"Error committing writer: {e}")
             if session.is_active:
@@ -71,17 +76,25 @@ class FileIndexWorker(QObject):
         try:
             str_path = str(file_path)
             stats = file_path.stat()
-            file_mod_time = datetime.fromtimestamp(stats.st_mtime)
+            file_mod_time = datetime.fromtimestamp(stats.st_mtime, UTC)
             file_size = stats.st_size
 
             existing_file = session.query(IndexedFile).filter_by(file_path=str_path).first()
-            if existing_file:
-                if existing_file.date_modified >= file_mod_time:
-                    return
-
-            display_type, content = extract_content_from_file(file_path)
-            if display_type.startswith("unsupported") or display_type == "image":
+            if existing_file and existing_file.date_modified >= file_mod_time:
                 return
+
+            display_type, content, ai_eligible = extract_content_from_file(file_path)
+            if not content or display_type.startswith("unsupported"):
+                return
+
+            ai_tags = ""
+            ai_summary = ""
+            if ai_eligible:
+                try:
+                    self.progress_updated.emit(f"Generating AI tags for {file_path.name}...")
+                    ai_tags, ai_summary = self.ai_service.get_tags_and_summary(content)
+                except Exception as e:
+                    print(f"AI tagging skipped/failed for {file_path}: {e}")
 
             self.progress_updated.emit(f"Processing {file_path.name}...")
 
@@ -92,7 +105,9 @@ class FileIndexWorker(QObject):
                     file_type=display_type,
                     file_size=file_size,
                     date_modified=file_mod_time,
-                    extracted_content=""
+                    extracted_content="",
+                    ai_tags="",
+                    ai_summary=""
                 )
                 session.add(new_file)
                 session.flush()
@@ -102,7 +117,9 @@ class FileIndexWorker(QObject):
                 existing_file.file_size = file_size
                 existing_file.date_modified = file_mod_time
                 existing_file.extracted_content = ""
-                existing_file.date_indexed = datetime.now()
+                existing_file.ai_tags = ""
+                existing_file.ai_summary = ""
+                existing_file.date_indexed = datetime.now(UTC)
                 new_file = existing_file
 
             session.commit()
@@ -119,21 +136,16 @@ class FileIndexWorker(QObject):
                 new_file.extracted_content = content
                 new_file.ai_tags = ai_tags
                 new_file.ai_summary = ai_summary
-                new_file.date_indexed = datetime.now()
+                new_file.date_indexed = datetime.now(UTC)
                 session.commit()
 
-                self.index_service.add_or_update_document(
-                    writer,
-                    new_file,
-                    ai_tags,
-                    ai_summary
-                )
+                self.index_service.add_or_update_document(writer, new_file, ai_tags, ai_summary)
 
                 try:
                     with open(INDEX_LOG_FILE, "a", encoding="utf-8") as f:
                         f.write(f"{str_path}\n")
                 except Exception as log_e:
-                    print(f"Failed to write to log file: {log_e}")
+                    print(f"Failed to write to index log file: {log_e}")
 
         except Exception as e:
             print(f"Error processing {file_path}: {e}")

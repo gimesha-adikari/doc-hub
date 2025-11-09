@@ -1,9 +1,14 @@
 import sys
 from PySide6.QtGui import QFont
 from PySide6.QtWidgets import QApplication
-from doc_hub.app.main_window import MainWindow
+from src.doc_hub.app.main_window import MainWindow
 
-from doc_hub.core.resource_utils import resource_path
+from core.resource_utils import resource_path
+import warnings
+import os
+
+os.environ["QT_LOGGING_RULES"] = "qt.core.qobject.connectslotsbyname=false"
+warnings.filterwarnings("ignore", category=UserWarning, module="tika")
 
 
 def main():
