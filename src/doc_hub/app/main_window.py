@@ -15,7 +15,9 @@ from PySide6.QtWidgets import (QMainWindow, QGraphicsDropShadowEffect, QWidget,
                                QHeaderView, QTableWidgetItem, QMenu,
                                QFileSystemModel, QFileIconProvider, QFileDialog, QCheckBox, QHBoxLayout,
                                QAbstractItemView, QPushButton, QMessageBox, QDialog, QVBoxLayout, QListWidget,
-                               QScrollArea, QGridLayout, QLabel, QTextEdit, QTableWidget, QStatusBar)
+                               QScrollArea, QGridLayout, QLabel, QTextEdit, QTableWidget, QStatusBar, QComboBox)
+
+from offline_ai.auto_launcher import launch_local_model
 from src.doc_hub.workers.duplicate_worker import DuplicateWorker
 from src.doc_hub.workers.index_worker import IndexWorker
 from src.doc_hub.app.settings_window import SettingsWindow
@@ -72,10 +74,28 @@ class MainWindow(QMainWindow):
         self.ui = Ui_MainWindow()
         self.ui.setupUi(self)
 
+        #--
+        self.model_selector = QComboBox()
+        self.model_selector.addItems(["Gemini", "Mistral", "Phi-2"])
+        self.model_selector.currentTextChanged.connect(self.on_model_selected)
+
+        self.model_selector.setToolTip("Select AI model for chat (Gemini / Mistral / Phi-2).")
+        self.model_selector.setFixedWidth(110)
+        try:
+            self.ui.search_bar_layout.addWidget(self.model_selector)
+        except Exception:
+            self.ui.left_vertical_layout.addWidget(self.model_selector)
+        #--
+
         self.search_service = SearchService()
         self.highlighter = Highlighter(self.ui.file_preview_text.document())
         self.manager = BackgroundManager(self.ui.statusbar, self)
+
         self.ai_service = AIService()
+
+        default_model = "Mistral"
+        launch_local_model(default_model)
+
         self.excluded_file_types = set()
         self.selected_tags = set()
 
@@ -243,6 +263,10 @@ class MainWindow(QMainWindow):
         self.watcher.fileChanged.connect(self.on_files_changed)
 
         self.results_card_container.resizeEvent = self._on_card_container_resized
+        try:
+            self.ai_service.model_choice = self.model_selector.currentText()
+        except Exception:
+            pass
 
         self._initialized = True
 
@@ -609,11 +633,36 @@ class MainWindow(QMainWindow):
         layout.addLayout(button_row)
 
         open_btn.clicked.connect(lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(file_path)))
-        ai_btn.clicked.connect(lambda: self.ai_service.get_tags_and_summary(record.extracted_content))
-        self.ui.statusbar.showMessage("File reanalyzed successfully.", 3000)
+
+        def reanalyze_and_update():
+            try:
+                self.ai_service.model_choice = self.model_selector.currentText()
+                tags_str, summary_text = self.ai_service.get_tags_and_summary(record.extracted_content or "")
+                summary_box.setPlainText(summary_text or "No AI summary available.")
+                if tags_str:
+                    nonlocal_tag_label = None
+                    for i in range(layout.count()):
+                        w = layout.itemAt(i).widget()
+                        if isinstance(w, QLabel) and w.text().startswith("<b>🏷️ Tags:</b>"):
+                            nonlocal_tag_label = w
+                            break
+                    if nonlocal_tag_label:
+                        nonlocal_tag_label.setText(f"<b>🏷️ Tags:</b>  {tags_str}")
+                    else:
+                        new_tag_label = QLabel(f"<b>🏷️ Tags:</b>  {tags_str}")
+                        new_tag_label.setStyleSheet("color: #b0b0b0; font-size: 12px; margin-top: 5px;")
+                        layout.insertWidget(3, new_tag_label)  # insert below summary
+                self.ui.statusbar.showMessage("File reanalyzed successfully.", 3000)
+            except Exception as e:
+                self.ui.statusbar.showMessage(f"AI reanalysis failed: {e}", 5000)
+
+        ai_btn.clicked.connect(reanalyze_and_update)
+
         close_btn.clicked.connect(dlg.close)
 
         def start_chat_with_document():
+            self.ai_service.model_choice = self.model_selector.currentText()
+
             self.ui.preview_tab_widget.setCurrentWidget(self.ui.tab_ai_chat)
             if record and record.extracted_content:
                 self.ui.file_preview_text.setText(record.extracted_content)
@@ -626,7 +675,6 @@ class MainWindow(QMainWindow):
 
         chat_btn.clicked.connect(start_chat_with_document)
 
-        # --- Fade-in animation ---
         dlg.setWindowOpacity(0)
         anim = QPropertyAnimation(dlg, b"windowOpacity")
         anim.setDuration(200)
@@ -1235,6 +1283,8 @@ class MainWindow(QMainWindow):
         </div>
         """
 
+        self.ai_service.model_choice = self.model_selector.currentText()
+
         self.ui.ai_chat_area.append(user_html)
         self.ui.ai_chat_area.verticalScrollBar().setValue(
             self.ui.ai_chat_area.verticalScrollBar().maximum()
@@ -1781,3 +1831,9 @@ class MainWindow(QMainWindow):
             self.manager.indexer_thread.wait()
 
         event.accept()
+
+    @Slot(str)
+    def on_model_selected(self, model_name: str):
+        from src.doc_hub.offline_ai.auto_launcher import launch_local_model
+        if model_name.lower() in ("mistral", "phi-2"):
+            launch_local_model(model_name.lower())

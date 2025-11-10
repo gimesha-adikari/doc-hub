@@ -43,3 +43,4 @@ desktop.ini
 /vendor/
 /src/database/reports/
 /src/database/whoosh_index/
+/GIT
