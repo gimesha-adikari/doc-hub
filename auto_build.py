@@ -5,7 +5,6 @@ import toml
 import importlib.util
 import sysconfig
 
-# --- STEP 1: Improved filter for non-installable or built-in modules ---
 EXCLUDE_PACKAGES = {
     "sys", "os", "re", "json", "datetime", "pathlib", "typing",
     "shutil", "textwrap", "subprocess", "sqlite3", "__future__",
@@ -15,7 +14,6 @@ EXCLUDE_PACKAGES = {
 }
 
 def is_stdlib_module(module_name: str) -> bool:
-    """Check if a module is part of the standard library."""
     if module_name in EXCLUDE_PACKAGES:
         return True
     spec = importlib.util.find_spec(module_name)
@@ -24,7 +22,6 @@ def is_stdlib_module(module_name: str) -> bool:
     stdlib_path = sysconfig.get_paths()["stdlib"]
     return spec.origin.startswith(stdlib_path)
 
-# --- STEP 2: Scan Python files for imports ---
 def detect_imports(source_dir):
     modules = set()
     for root, _, files in os.walk(source_dir):
@@ -39,7 +36,6 @@ def detect_imports(source_dir):
                                 modules.add(parts[1].split(".")[0])
                             elif parts[0] == "from":
                                 modules.add(parts[1].split(".")[0])
-    # Filter out stdlib and local modules
     filtered = [
         m for m in modules
         if not is_stdlib_module(m)
@@ -47,7 +43,6 @@ def detect_imports(source_dir):
     ]
     return filtered
 
-# --- STEP 3: Update pyproject.toml safely ---
 def update_pyproject(dependencies):
     pyproject_path = "pyproject.toml"
     data = toml.load(pyproject_path)
@@ -63,7 +58,7 @@ def update_pyproject(dependencies):
     with open(pyproject_path, "w") as f:
         toml.dump(data, f)
 
-    print(f"✅ Updated pyproject.toml with {len(dependencies)} valid dependencies:")
+    print(f"Updated pyproject.toml with {len(dependencies)} valid dependencies:")
     for dep in new_deps:
         print(f"   - {dep}")
 
@@ -74,9 +69,9 @@ def main():
     print("Detected imports:", ", ".join(deps))
     update_pyproject(deps)
 
-    print("📦 Building package...")
+    print("Building package...")
     subprocess.run([sys.executable, "-m", "build"], check=True)
-    print("🎉 Build complete! Check the dist/ folder.")
+    print("Build complete! Check the dist/ folder.")
 
 if __name__ == "__main__":
     main()

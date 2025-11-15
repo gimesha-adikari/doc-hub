@@ -1,0 +1,334 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>MainWindow</class>
+ <widget class="QMainWindow" name="MainWindow">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>1200</width>
+    <height>800</height>
+   </rect>
+  </property>
+  <property name="windowTitle">
+   <string>Document Hub</string>
+  </property>
+  <widget class="QWidget" name="centralwidget">
+   <layout class="QVBoxLayout" name="main_vertical_layout">
+    <item>
+     <widget class="QTabWidget" name="main_tab_widget">
+      <property name="currentIndex">
+       <number>0</number>
+      </property>
+
+      <!-- ================= SMART SEARCH TAB ================= -->
+      <widget class="QWidget" name="tab_smart_search">
+       <attribute name="title">
+        <string>Smart Search</string>
+       </attribute>
+       <layout class="QVBoxLayout" name="smart_search_layout">
+
+        <!-- SEARCH BAR -->
+        <item>
+         <layout class="QHBoxLayout" name="search_bar_layout">
+          <item>
+           <widget class="QLineEdit" name="search_bar">
+            <property name="placeholderText">
+             <string>Search documents, AI tags, or content...</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QPushButton" name="filter_button">
+            <property name="text">
+             <string>F</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QPushButton" name="settings_button">
+            <property name="text">
+             <string>S</string>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </item>
+
+        <!-- TAG CHIPS -->
+        <item>
+         <layout class="QHBoxLayout" name="tag_chip_layout"/>
+        </item>
+
+        <!-- MAIN HORIZONTAL SPLITTER (LEFT + RIGHT) -->
+        <item>
+         <widget class="QSplitter" name="main_search_splitter">
+          <property name="orientation">
+           <enum>Qt::Horizontal</enum>
+          </property>
+
+          <!-- ===== LEFT CONTAINER ===== -->
+          <widget class="QWidget" name="left_container">
+           <layout class="QVBoxLayout" name="left_vertical_layout">
+            <property name="spacing">
+             <number>6</number>
+            </property>
+            <item>
+             <widget class="QTreeView" name="explorer_tree_view">
+              <property name="headerHidden">
+               <bool>false</bool>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QTableWidget" name="results_table">
+              <property name="editTriggers">
+               <set>QAbstractItemView::NoEditTriggers</set>
+              </property>
+              <property name="selectionBehavior">
+               <enum>QAbstractItemView::SelectRows</enum>
+              </property>
+              <property name="horizontalScrollMode">
+               <enum>QAbstractItemView::ScrollPerPixel</enum>
+              </property>
+              <attribute name="horizontalHeaderStretchLastSection">
+               <bool>true</bool>
+              </attribute>
+              <column>
+               <property name="text">
+                <string>Name</string>
+               </property>
+              </column>
+              <column>
+               <property name="text">
+                <string>Type</string>
+               </property>
+              </column>
+              <column>
+               <property name="text">
+                <string>Size</string>
+               </property>
+              </column>
+              <column>
+               <property name="text">
+                <string>Modified</string>
+               </property>
+              </column>
+             </widget>
+            </item>
+           </layout>
+          </widget>
+
+          <!-- ===== RIGHT CONTAINER ===== -->
+          <widget class="QTabWidget" name="preview_tab_widget">
+           <property name="currentIndex">
+            <number>0</number>
+           </property>
+
+           <!-- Preview Tab -->
+           <widget class="QWidget" name="tab_preview">
+            <attribute name="title">
+             <string>Preview</string>
+            </attribute>
+            <layout class="QVBoxLayout" name="preview_layout">
+             <item>
+              <widget class="QStackedWidget" name="preview_stack">
+               <property name="currentIndex">
+                <number>0</number>
+               </property>
+               <widget class="QWidget" name="page_text">
+                <layout class="QVBoxLayout" name="page_text_layout">
+                 <item>
+                  <widget class="QTextBrowser" name="file_preview_text">
+                   <property name="readOnly">
+                    <bool>true</bool>
+                   </property>
+                   <property name="placeholderText">
+                    <string>Select a file to preview its content...</string>
+                   </property>
+                  </widget>
+                 </item>
+                </layout>
+               </widget>
+               <widget class="QWidget" name="page_image">
+                <layout class="QVBoxLayout" name="page_image_layout">
+                 <item>
+                  <widget class="QLabel" name="image_preview_label">
+                   <property name="alignment">
+                    <set>Qt::AlignCenter</set>
+                   </property>
+                  </widget>
+                 </item>
+                </layout>
+               </widget>
+               <widget class="QWidget" name="page_default">
+                <layout class="QVBoxLayout" name="page_default_layout">
+                 <item>
+                  <widget class="QLabel" name="default_preview_label">
+                   <property name="text">
+                    <string>Preview not available for this file type.</string>
+                   </property>
+                   <property name="alignment">
+                    <set>Qt::AlignCenter</set>
+                   </property>
+                  </widget>
+                 </item>
+                </layout>
+               </widget>
+              </widget>
+             </item>
+            </layout>
+           </widget>
+
+           <!-- AI Chat Tab -->
+           <widget class="QWidget" name="tab_ai_chat">
+            <attribute name="title">
+             <string>AI Chat</string>
+            </attribute>
+            <layout class="QVBoxLayout" name="ai_chat_layout">
+             <item>
+              <widget class="QTextBrowser" name="ai_chat_area">
+               <property name="placeholderText">
+                <string>Ask a question about the document in the 'Preview' tab to start chatting...</string>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <layout class="QHBoxLayout" name="ai_input_layout">
+               <item>
+                <widget class="QLineEdit" name="ai_question_input">
+                 <property name="placeholderText">
+                  <string>Ask a question...</string>
+                 </property>
+                </widget>
+               </item>
+               <item>
+                <widget class="QPushButton" name="ai_ask_button">
+                 <property name="text">
+                  <string>Ask AI</string>
+                 </property>
+                </widget>
+               </item>
+              </layout>
+             </item>
+            </layout>
+           </widget>
+          </widget>
+         </widget>
+        </item>
+       </layout>
+      </widget>
+
+      <!-- ================= FILE ORGANIZER TAB ================= -->
+      <widget class="QWidget" name="tab_file_organizer">
+       <attribute name="title">
+        <string>File Organizer</string>
+       </attribute>
+       <layout class="QVBoxLayout" name="file_organizer_layout">
+        <item>
+         <widget class="QLabel" name="organizer_intro_label">
+          <property name="text">
+           <string>Organize loose files in a folder using AI. This will ignore all sub-folders.</string>
+          </property>
+          <property name="alignment">
+           <set>Qt::AlignCenter</set>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <layout class="QHBoxLayout" name="organizer_path_layout">
+          <item>
+           <widget class="QLineEdit" name="organizer_source_path_input">
+            <property name="placeholderText">
+             <string>Select a "Source" folder to organize (e.g., /home/user/Downloads)</string>
+            </property>
+            <property name="readOnly">
+             <bool>true</bool>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QPushButton" name="organizer_source_browse_button">
+            <property name="text">
+             <string>Browse Source...</string>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </item>
+        <item>
+         <layout class="QHBoxLayout" name="organizer_dest_layout">
+          <item>
+           <widget class="QLineEdit" name="organizer_dest_path_input">
+            <property name="placeholderText">
+             <string>Select a "Destination" folder for the organized files (e.g., /home/user/Documents)</string>
+            </property>
+            <property name="readOnly">
+             <bool>true</bool>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QPushButton" name="organizer_dest_browse_button">
+            <property name="text">
+             <string>Browse Destination...</string>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </item>
+        <item>
+         <widget class="QPushButton" name="organizer_analyze_button">
+          <property name="text">
+           <string>1. Analyze Files</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QTableWidget" name="organizer_table">
+          <property name="editTriggers">
+           <set>QAbstractItemView::NoEditTriggers</set>
+          </property>
+          <property name="selectionMode">
+           <enum>QAbstractItemView::NoSelection</enum>
+          </property>
+          <attribute name="horizontalHeaderStretchLastSection">
+           <bool>true</bool>
+          </attribute>
+          <column>
+           <property name="text">
+            <string>Organize</string>
+           </property>
+          </column>
+          <column>
+           <property name="text">
+            <string>File Name</string>
+           </property>
+          </column>
+          <column>
+           <property name="text">
+            <string>Suggested Category</string>
+           </property>
+          </column>
+         </widget>
+        </item>
+        <item>
+         <widget class="QPushButton" name="organizer_run_button">
+          <property name="text">
+           <string>2. Organize Checked Files</string>
+          </property>
+         </widget>
+        </item>
+       </layout>
+      </widget>
+     </widget>
+    </item>
+   </layout>
+  </widget>
+
+  <widget class="QMenuBar" name="menubar"/>
+  <widget class="QStatusBar" name="statusbar"/>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>
